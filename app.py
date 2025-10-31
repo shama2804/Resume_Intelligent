@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, session
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from pymongo import MongoClient
@@ -6,6 +6,7 @@ from bson import ObjectId
 import os
 
 app = Flask(__name__)
+app.secret_key = "supersecretkey"  # needed for sessions
 
 # === CONFIG ===
 UPLOAD_FOLDER = 'uploads/hr_verifications'
@@ -114,9 +115,35 @@ def login_page():
             return render_template('login.html', error='Incorrect password.')
 
         # Login successful
-        return render_template('dashboard.html', hr=hr)
+        # Login successful
+        session['hr_id'] = str(hr['_id'])  # store HR in session
+        return redirect(url_for('dashboard'))
 
     return render_template('login.html')
+@app.route('/dashboard')
+def dashboard():
+    hr_id = session.get('hr_id')
+    if not hr_id:
+        return redirect(url_for('login_page'))
+    
+    hr = hr_accounts.find_one({'_id': ObjectId(hr_id)})
+    if not hr:
+        return redirect(url_for('login_page'))
+    
+    # Default metrics to avoid Jinja errors
+    metrics = {
+        "open_positions": {"value": 0, "trend": 0},
+        "applications_week": {"value": 0, "trend": 0},
+        "manage_positions": {"value": 0, "trend": 0}
+    }
+
+    # Default analytics to avoid Jinja errors
+    analytics = {
+        "hiring_trends": "No data available",
+        "department_distribution": "No data available"
+    }
+
+    return render_template('dashboard.html', hr=hr, metrics=metrics, analytics=analytics)
 
 # === ADMIN ROUTES ===
 @app.route('/admin/pending_hr')
